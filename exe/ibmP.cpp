@@ -37,12 +37,13 @@ int main(int argc, char* argv[]) {
 	int n[2]; n[0]=n[1]=128;
 	double d[2]; d[0]=d[2]=1/128;
 	double mu = 0.05;
+	int num_threads = 2;
 	double* p = new double[n[0]*n[1]*sizeof(double)];
 	double* u = new double[n[0]*n[1]*sizeof(double)];
 	double* v = new double[n[0]*n[1]*sizeof(double)];
 	double* fu = new double[n[0]*n[1]*sizeof(double)];
 	double* fv = new double[n[0]*n[1]*sizeof(double)];
-	fluidSolve2Domp(n, d, mu, 2, p, u, v, fu, fv);
+	fluidSolve2Domp(n, d, mu, num_threads, p, u, v, fu, fv);
 	delete []p;delete []u;delete []v;delete []fu;delete []fv;
 
 
