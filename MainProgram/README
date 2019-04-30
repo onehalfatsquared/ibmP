@@ -1,0 +1,9 @@
+The main program is IBMain.cpp
+The fiber information is all contained in ImmersedFiber.cpp
+As of 04/30/2019:
+1. The fiber is initialized in an ellipsoidal configuration 
+  1a. It is a 3D fiber but the z coordinate is 0 everywhere. 
+2. The force on the fiber is computed using fiber elasticity
+3. The force is spread to the fluid. 
+IMPORTANT: the spreading is done in the following stacking
+fluidIndex = nX*nY*zIndex + nX*yIndex + xIndex
