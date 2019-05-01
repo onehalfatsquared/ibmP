@@ -1,11 +1,3 @@
-//
-//  ImmersedFiber.cpp
-//  IBMethod3D
-//
-//  Created by Wanda Strychalski on 6/13/14.
-//
-//
-
 #include "ImmersedFiber.h"
 #include <iostream>
 #include <cmath>
@@ -44,9 +36,14 @@ ImmersedFiber::ImmersedFiber(double r, double k, double a, int N){
 		//printf("Point %d has (%f,%f,%f)\n",iPt,_xIB[iPt],_yIB[iPt],_zIB[iPt]);
 	}
 	
-	
-   
 } // end constructor
+
+//Deconstructor
+ImmersedFiber::~ImmersedFiber() {
+    free(_xIB); free(_yIB); free(_zIB);
+    free(_xForce); free(_yForce); free(_zForce);
+}
+
 
 
 /***************************************

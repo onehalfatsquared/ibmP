@@ -1,17 +1,12 @@
-//
-//  ImmersedFiber.h
-//  IBMethod3D
-//
-//  Created by Wanda Strychalski on 6/13/14.
-//
-//
+
 
 class ImmersedFiber {
 public:
-    	ImmersedFiber(double r, double k, double a, int N);
+  ImmersedFiber(double r, double k, double a, int N);
+  ~ImmersedFiber(); 
 	void calcForces();
 	void spreadForces(double *forceX, double *forceY, double *forceZ, double* xEpts, 
-   		int Nx, double* yEpts, int Ny, double* zEpts, int Nz);
+ 	int Nx, double* yEpts, int Ny, double* zEpts, int Nz);
 	void updateBoundary();
 
 private:
