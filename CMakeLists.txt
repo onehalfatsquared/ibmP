@@ -14,10 +14,13 @@ IF(USE_OpenMP)
   ENDIF()
 ENDIF()
 
-FIND_LIBRARY(FFTW3_LIBRARIES NAMES fftw3 libfftw3 PATHS /usr/lib <other paths>)
+# Set your fftw3 path here. Only works with cmake install of fftw3
+SET(FFTW3_DIR "/home/anthony/fftw-3.3.8")
+find_package(FFTW3 REQUIRED)
 
 add_subdirectory(solver)
 include_directories(solver)
 add_subdirectory(boundary)
 include_directories(boundary)
 add_subdirectory(exe)
+
