@@ -14,6 +14,8 @@ IF(USE_OpenMP)
   ENDIF()
 ENDIF()
 
+FIND_LIBRARY(FFTW3_LIBRARIES NAMES fftw3 libfftw3 PATHS /usr/lib <other paths>)
+
 add_subdirectory(solver)
 include_directories(solver)
 add_subdirectory(boundary)
