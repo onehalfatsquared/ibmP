@@ -77,7 +77,7 @@ void ImmersedFiber::calcForces(int random) {
 		_xForce[iPt]=unif(rng);
 		_yForce[iPt]=unif(rng);
 		_zForce[iPt]=unif(rng);
-		printf("Point %d has (%f,%f,%f)\n",iPt,_xForce[iPt],_yForce[iPt],_zForce[iPt]);
+		//printf("Point %d has (%f,%f,%f)\n",iPt,_xForce[iPt],_yForce[iPt],_zForce[iPt]);
 	   } // end loop over points
 	} 
 
@@ -117,10 +117,10 @@ void ImmersedFiber::calcForces(int random) {
 		   _yForce[iPt]=(T2*(tao22/nt2)-T1*(tao12/nt1));
 		   _zForce[iPt]=(T2*(tao23/nt2)-T1*(tao13/nt1));
 		}
-		printf("Point %d has (%f,%f,%f)\n",iPt,_xForce[iPt],_yForce[iPt],_zForce[iPt]);
+		//printf("Point %d has (%f,%f,%f)\n",iPt,_xForce[iPt],_yForce[iPt],_zForce[iPt]);
 	} // end loop over points
 	// Now compute the bending force
-	//# pragma omp parallel for 
+	# pragma omp parallel for 
 	for (int iPt=0; iPt < _NIB; iPt++){
 		double wtm2 = -1.0;
 		double wtm1 = 4.0;
@@ -141,7 +141,7 @@ void ImmersedFiber::calcForces(int random) {
 				wt0*_yIB[iPt]+wtp1*_yIB[indexp1]+wtp2*_yIB[indexp2]);
 		_zForce[iPt]+=_kb*invh3*(wtm2*_zIB[indexm2]+wtm1*_zIB[indexm1]+
 				wt0*_zIB[iPt]+wtp1*_zIB[indexp1]+wtp2*_zIB[indexp2]);
-		printf("Point %d has (%f,%f,%f)\n",iPt,_xForce[iPt],_yForce[iPt],_zForce[iPt]);
+		//printf("Point %d has (%f,%f,%f)\n",iPt,_xForce[iPt],_yForce[iPt],_zForce[iPt]);
 	} // end loop over points
     } // end else
 } // end of compute elastic forces
