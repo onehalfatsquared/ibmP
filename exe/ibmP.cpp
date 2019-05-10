@@ -9,36 +9,41 @@
 #include <fstream>
 #include "fluidSolver.h"
 #include "ImmersedFiber.h"
-
+#include <vector> 
+#include <omp.h>
 
 
 int main(int argc, char* argv[]) {
-
-	//check for input //todo - what is input?
-	if (argc != 2) {
-		fprintf(stderr, "Usage: <?> %s\n", argv[0]);
-		return 1;
-	}
-
-	// Input parameters. Will make into an input file later. 
-    double sphereRadius = 1.0;
-    double springStiff = 1.0;
-    double ae = -1.0;
-    double be = 1.0;
-    int n = 32;
-    double mu=1.0;
-    double dt=1e-4;
-    double until = 1.0;
+    // Input parameters. Will make into an input file later. 
+    std::ifstream infile;
+    infile.open("inputs.txt");
+    std::string name;
+    double var1;
+    std::vector <double> values;
+    while (infile >> name >> var1)
+    {
+        values.push_back(var1);
+    }
+    double L = values[0];
+    double kel = values[1];
+    double kbend = values[2];
+    double ae = values[3];
+    double be = values[4];
+    int n = (int) (values[5]+1e-5);
+    double mu = values[6];
+    double dt = values[7];
+    double until = values[8];
+    int random = (int) values[9];
+    //printf("%f %f %f %f %f %d %f % f %f",L, kel, kbend, ae, be, n, mu, dt, until);
     double h = (be-ae)/((double)n);
-
     //Initialize Eulerian grid
     double *xEpts = (double *) malloc(n*sizeof(double));
     double *yEpts = (double *) malloc(n*sizeof(double));
     double *zEpts = (double *) malloc(n*sizeof(double));
     for (int iPt=0; iPt < n; iPt++){
-			xEpts[iPt]=ae+h*iPt;
-			yEpts[iPt]=ae+h*iPt;
-			zEpts[iPt]=ae+h*iPt;
+	xEpts[iPt]=ae+h*iPt;
+	yEpts[iPt]=ae+h*iPt;
+	zEpts[iPt]=ae+h*iPt;
     }
 
     // Initialize arrays for the spread forces
@@ -46,10 +51,15 @@ int main(int argc, char* argv[]) {
     double *gridFX = (double *) malloc(n*n*n*sizeof(double));
     double *gridFY = (double *) malloc(n*n*n*sizeof(double));
     double *gridFZ = (double *) malloc(n*n*n*sizeof(double));
-    int NIB = (int)floor(4*M_PI*sphereRadius/h); // two points per meshwidth
-    ImmersedFiber Fib = ImmersedFiber(sphereRadius, springStiff, 1.5, NIB);
-    Fib.calcForces();
+    int NIB = (int)floor(2.0*L/h); // two points per meshwidth
+    ImmersedFiber Fib = ImmersedFiber(L, kel, kbend, NIB, random);
+    double start = omp_get_wtime();
+    Fib.calcForces(random);
+    double forTime = omp_get_wtime();
+    printf("Calc force time is %f \n", forTime-start);
     Fib.spreadForces(gridFX, gridFY, gridFZ, xEpts, n, yEpts, n, zEpts, n);
+    double sTime = omp_get_wtime();
+    printf("Spread time is %f \n", sTime-forTime);
     //outputs forces in x and y
     /*
     std::ofstream fout1("xGridForce.txt");
@@ -69,17 +79,22 @@ int main(int argc, char* argv[]) {
 	int num_threads = 4;
 	double *p = (double *) malloc(n*n*n*sizeof(double));
 	double *u = (double *) malloc(n*n*n*sizeof(double));
-  double *v = (double *) malloc(n*n*n*sizeof(double));
-  double *w = (double *) malloc(n*n*n*sizeof(double));
+  	double *v = (double *) malloc(n*n*n*sizeof(double));
+  	double *w = (double *) malloc(n*n*n*sizeof(double));
 	fluidSolve3Domp(N, H, mu,num_threads, p, u, v, w, gridFX, gridFY, gridFZ);
+        double fTime = omp_get_wtime();
+    	printf("Fluid solve time is %f \n", fTime-sTime);
 	//velocity is now in u,v,w
-
-
+        // Interpolate velocity and get update points
+	Fib.getBoundaryVelocity(u, v, w, xEpts, n, yEpts, n, zEpts, n);
+	Fib.updatePoints(dt);
+	double iTime = omp_get_wtime();
 
 	//free the memory
 	free(gridFX); free(gridFY); free(gridFZ); free(u); free(v); free(w); free(p);
 	free(xEpts); free(yEpts); free(zEpts);
-
+	
+	printf("Interpolate time is %f \n", iTime-fTime);
 
 	return 0;
 }
