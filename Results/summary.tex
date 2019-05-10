@@ -1,0 +1,28 @@
+\documentclass[]{article}
+\usepackage{graphicx}
+\usepackage{multirow}% http://ctan.org/pkg/multirow
+
+\title{Scaling Tests}
+\begin{document}
+\maketitle
+
+\section{OpenMP Fluid Solver Results}
+
+The following table was generated using $n=128$ grid points in each dimension and with boundary points and forces generated randomly.\\
+
+\begin{tabular}{|c||l|l|l|}
+	\hline
+	\multirow{2}{*}{Task} 
+	& \multicolumn{3}{c||}{Time (s)}  \\
+	& 1 Thread & 2 Threads & 4 Threads  \\  \hline
+	Force Calculation & 0.0005 & 0.000143 & 0.000194  \\      \hline
+	Array Initialization & 0.02 & 0.014 & 0.0067  \\      \hline
+	Force Spreading & 0.02 & 0.011 & 0.066 \\ \hline
+	Fluid Solve & 0.5 & 0.39 & 0.33 \\ \hline
+	Velocity Interpolation & 0.00026& 0.00018& 0.00016\\ \hline 
+\end{tabular}
+\\
+
+Similar results are achieved using the single fiber as well...
+
+\end{document}
