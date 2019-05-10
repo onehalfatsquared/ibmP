@@ -24,3 +24,5 @@ add_subdirectory(boundary)
 include_directories(boundary)
 add_subdirectory(exe)
 
+file(COPY input DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/exe)
+

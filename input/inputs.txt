@@ -16,4 +16,4 @@ dt 1.0
 
 until 1.0
 
-random 0
+random 1

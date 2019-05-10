@@ -33,6 +33,7 @@ ImmersedFiber::ImmersedFiber(double L, double k, double kb, int N, int random){
 	_uIB = (double*) malloc(_NIB*sizeof(double));
 	_vIB = (double*) malloc(_NIB*sizeof(double));
 	_wIB = (double*) malloc(_NIB*sizeof(double));
+    _first = NULL; _next = NULL;
 	if (random){
 	    for (int iPt = 0; iPt < _NIB; iPt++){
 		_xIB[iPt]=unif(rng);
@@ -84,7 +85,7 @@ void ImmersedFiber::calcForces(int random) {
 	else { // Assuming fibers with tension and bending
 	// Calculate the force due to fiber tension
 	double invh3 = 1.0/(_h*_h*_h);
-	printf("kb/h3 %f \n ",_kb*invh3);
+	printf("kb/h3 %f \n",_kb*invh3);
 	double tao11, tao12, tao13, tao21, tao22, tao23;
 	double nt1, nt2, T1, T2;
 	int indexm1, indexp1;
@@ -207,7 +208,7 @@ void ImmersedFiber::spreadForces(double *forceX, double *forceY, double *forceZ,
 	forceY[iPt]=0;
 	forceZ[iPt]=0;
     }
-    printf("Time to initialize arrays in spreading %f \n ", omp_get_wtime()-dd);
+    printf("Time to initialize arrays in spreading %f\n", omp_get_wtime()-dd);
     // Loop over colors
     for (int color=0; color < 16; color++){
         #pragma omp parallel for schedule(static)
@@ -217,7 +218,7 @@ void ImmersedFiber::spreadForces(double *forceX, double *forceY, double *forceZ,
             int ilam=_first[bin];
             while (ilam > -1){
 	    //std::cout << "Updating point " << ilam << std::endl;
-		if (ilam ==0) printf("Num threads %d \n",omp_get_num_threads());
+		if (ilam ==0) printf("Num threads %d\n",omp_get_num_threads());
                 int floorz=ceil((_zIB[ilam]-aez)/hez);
                 int floory=ceil((_yIB[ilam]-aey)/hey);
                 int floorx=ceil((_xIB[ilam]-aex)/hex);
@@ -242,8 +243,8 @@ void ImmersedFiber::spreadForces(double *forceX, double *forceY, double *forceZ,
             }
         }
     }
-    free(_first);
-    free(_next);
+    //free(_first);
+    //free(_next);
 }
 
 
