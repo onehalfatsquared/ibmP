@@ -8,21 +8,41 @@
 
 \section{OpenMP Fluid Solver Results}
 
-The following table was generated using $n=128$ grid points in each dimension and with boundary points and forces generated randomly.\\
+\subsection{Particles} 
+For strong scaling, we consider $N=10^6$ particles in a box of size $256 \times 256 \times 256$. The particles are points with random forces applied to them. We concern ourselves with the time to \textit{spread} the force to the grid, \textit{solve} the fluid equations on the grid, and \textit{interpolate} back to evaluate the velocities at the points (included in this is the time to take a forward Euler step to update the points). The reason for these parameter choices is so that the time for each of these 3 core operations is similar on one core. 
 
-\begin{tabular}{|c||l|l|l|}
+Strong scaling in Table \ref{tab:ptsc} was run on \texttt{crunchy1} and results were averaged over 2 trials. 
+
+\begin{table}
+\centering
+\begin{tabular}{|c||l|l|l|l|l|l|l|}
 	\hline
 	\multirow{2}{*}{Task} 
-	& \multicolumn{3}{c||}{Time (s)}  \\
-	& 1 Thread & 2 Threads & 4 Threads  \\  \hline
-	Force Calculation & 0.0005 & 0.000143 & 0.000194  \\      \hline
-	Array Initialization & 0.02 & 0.014 & 0.0067  \\      \hline
-	Force Spreading & 0.02 & 0.011 & 0.066 \\ \hline
-	Fluid Solve & 0.5 & 0.39 & 0.33 \\ \hline
-	Velocity Interpolation & 0.00026& 0.00018& 0.00016\\ \hline 
+	& \multicolumn{7}{c|}{Time (s)}  \\
+	& 1 Thread & 2 & 4 & 8 & 16 & 32 & 64 \\  \hline
+	Spread & 17.3 & 11.2 & 10.8 &9.2 &  5.9 & 4.5 & 3.8\\      \hline
+	Solve & 13.2 & 11.0  & 10.3 & 8.7 & 8.2  & 9.3 & 9.2\\      \hline
+	Interpolate & 12.6 & 7.0 & 3.6 & 1.8 & 0.9 & 0.6 & 0.5\\  \hline
 \end{tabular}
-\\
+\caption{Results of strong scaling analysis for points.}
+\label{tab:ptsc}
+\end{table}
 
-Similar results are achieved using the single fiber as well...
+\subsection{Fibers}
+We do a test for fibers because the force is more localized in that case then just random particles. 8000 fibers are generated with a random starting location. All of the fibers have the same orientation/position relative to the starting location. We report the same timings as in Table \ref{tab:ptsc}, this time for fibers, in Table \ref{tab:fibsc}. 
+\begin{table}
+\centering
+\begin{tabular}{|c||l|l|l|l|l|l|l|}
+	\hline
+	\multirow{2}{*}{Task} 
+	& \multicolumn{7}{c|}{Time (s)}  \\
+	& 1 Thread & 2 & 4 & 8 & 16 & 32 & 64\\  \hline
+	Spread & 15.2 & 13.0 & 12.3  & 7.1 & 5.2 & 2.6 & 2.0\\      \hline
+	Solve & 13.8 & 11.3  & 10.8  & 10.3 & 10.0 & 8.5 & 9.4\\      \hline
+	Interpolate & 11.9 & 6.0 & 3.2 & 1.6 & 0.9 & 0.4 & 0.4\\  \hline
+\end{tabular}
+\caption{Results of strong scaling analysis for fibers.}
+\label{tab:fibsc}
+\end{table}
 
 \end{document}
