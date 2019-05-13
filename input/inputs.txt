@@ -1,19 +1,21 @@
 L 1.0
 
-k 0.0
+k 100.0
 
-kb 1.0
+kb 0.04
 
 ae -2.0
 
 be 2.0
 
-n 32
+n 256 
+
+Nf 1  
 
 mu 1.0
 
-dt 1.0
+dt 1e-4 
 
 until 1.0
 
-random 1
+random 1 
