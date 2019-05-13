@@ -2,7 +2,7 @@
 
 class ImmersedFiber {
 public:
-  ImmersedFiber(double L, double k, double kb, int N, int random);
+  ImmersedFiber(double L, double k, double kb, int N, int Nfib, int random);
   ~ImmersedFiber(); 
 	void calcForces(int random);
 	void spreadForces(double *forceX, double *forceY, double *forceZ, double* xEpts, 
@@ -14,6 +14,7 @@ public:
 private:
 	double _L, _k, _kb, _h;
 	int _NIB;
+	int _Nfib;
 	double *_xIB;
 	double *_yIB;
 	double *_zIB;
@@ -23,6 +24,8 @@ private:
 	int *_first, *_next; // linked lists for the bins
 	double *_xForce, *_yForce, *_zForce;
 	void binPoints(double he, double ax, double bx, double ay, double by, int Nx);
+	void calcElasticForces();
+	void calcBendingForces();
     
 };
 
