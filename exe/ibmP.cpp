@@ -12,8 +12,7 @@
 #include <vector> 
 #include <omp.h>
 
-void readInput(std::string file, double& L, double& kel, double& kbend, double& ae, double& be, int& n, double& mu, 
-								double& dt, double& until, int& random, double& h) {
+void readInput(std::string file, double& L, double& kel, double& kbend, double& ae, double& be, int& n, int &Nfib, double& mu, double& dt, double& until, int& random, double& h) {
 	//read the parameters from file
 	std::ifstream infile;
   infile.open(file);
@@ -28,12 +27,13 @@ void readInput(std::string file, double& L, double& kel, double& kbend, double& 
   kel = values[1];
   kbend = values[2];
   ae = values[3];
- 	be = values[4];
+  be = values[4];
   n = (int) (values[5]+1e-5);
-  mu = values[6];
-  dt = values[7];
-  until = values[8];
-  random = (int) values[9];
+  Nfib = (int) (values[6]+1e-5);
+  mu = values[7];
+  dt = values[8];
+  until = values[9];
+  random = (int) values[10];
   //printf("%f %f %f %f %f %d %f % f %f",L, kel, kbend, ae, be, n, mu, dt, until);
   h = (be-ae)/((double)n);
 }
@@ -46,8 +46,8 @@ int main(int argc, char* argv[]) {
 	}
 	std::string file = (argv[1]);
 	double L, kel, kbend, ae, be, mu, dt, until, h;
-	int n, random;
-	readInput(file, L, kel, kbend, ae, be, n, mu, dt, until,random, h);
+	int n, Nfib, random;
+	readInput(file, L, kel, kbend, ae, be, n, Nfib, mu, dt, until,random, h);
 
   //Initialize Eulerian grid
   double *xEpts = (double *) malloc(n*sizeof(double));
@@ -67,7 +67,8 @@ int main(int argc, char* argv[]) {
 
   //initialize the immersed fiber
   int NIB = (int)floor(2.0*L/h); // two points per meshwidth
-  ImmersedFiber Fib = ImmersedFiber(L, kel, kbend, NIB, random);
+  if (random){ NIB=1000000/Nfib;}
+  ImmersedFiber Fib = ImmersedFiber(L, kel, kbend, NIB, Nfib, random);
 
   //time force calculation
   double start = omp_get_wtime();
@@ -96,14 +97,11 @@ int main(int argc, char* argv[]) {
 	int N[3]; N[0]=N[1]=N[2] = n;
 	double H[3]; H[0]=H[1]=H[2] = h;
 	int num_threads;
-	#pragma omp parallel //omp_get_num_threads is only accurate in a parallel region - fix?
-	{
-		num_threads = omp_get_num_threads();
-	}
+	num_threads = omp_get_max_threads();
 	double *p = (double *) malloc(n*n*n*sizeof(double));
 	double *u = (double *) malloc(n*n*n*sizeof(double));
-  double *v = (double *) malloc(n*n*n*sizeof(double));
-  double *w = (double *) malloc(n*n*n*sizeof(double));
+  	double *v = (double *) malloc(n*n*n*sizeof(double));
+  	double *w = (double *) malloc(n*n*n*sizeof(double));
 
   //call and time fluid solve
 	fluidSolve3Domp(N, H, mu,num_threads, p, u, v, w, gridFX, gridFY, gridFZ);

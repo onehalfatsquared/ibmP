@@ -1,28 +1,164 @@
 \documentclass[]{article}
 \usepackage{graphicx}
 \usepackage{multirow}% http://ctan.org/pkg/multirow
+\usepackage[utf8]{inputenc}
+\usepackage[utf8]{inputenc}
+\usepackage{graphicx,epstopdf,subfigure,mathtools,mathrsfs} 
+\usepackage[normalem]{ulem}
+\PassOptionsToPackage{usenames,dvipsnames}{xcolor}
+\usepackage[usenames,dvipsnames]{xcolor}
+\newcommand{\cmt}[1]{\color{blue}#1\normalcolor}
+\newcommand{\norm}[1]{\left\lVert #1 \right\rVert} 
+\newcommand{\mat}[1]{\mathbf{#1}}
+% notation
+\newcommand{\bm}[1]{\mbox{\boldmath $ #1 $}}    % bold math mode
+\renewcommand{\vec}[1]{\bm{#1}}                 % vector notation
+\def\cddot{% two dots stacked vertically
+  \mathbin{\vcenter{\baselineskip.67ex
+    \hbox{\onedot}\hbox{\onedot}}%
+  }}
+  \usepackage{hyperref}
+\hypersetup{
+    colorlinks=false,
+    pdfborder={0 0 0},
+}
 
-\title{Scaling Tests}
+% Set the margins for 1" around
+\setlength{\topmargin}{-0.5in}
+\setlength{\oddsidemargin}{0.1in}
+\setlength{\evensidemargin}{0.0in}
+\setlength{\textwidth}{6.4in}
+\setlength{\textheight}{8.9in}
+
+\title{Parallel Immersed Boundary Method for Stokes Flow}
+\author{Tristan Goodwill, Ondrej Maxian, and Anthony Trubiano}
 \begin{document}
 \maketitle
 
-\section{OpenMP Fluid Solver Results}
+\section{IB Method}
+We consider the immersed boundary method in the special case when the Stokes equations govern the fluid mechanics. That is, 
+\begin{gather}
+\label{eq:S1}
+\mu \Delta \bm{u} - \nabla p + \bm{f} = \bm{0}, \\
+\label{eq:S2}
+\nabla \cdot \bm{u} = 0,
+\end{gather}
+where $\mu$ is the fluid viscosity, $\vec{u}$ is the fluid velocity, $p$ is the pressure, and $\vec{f}$ is the external forcing. We consider a periodic domain and use a spectral method to solve the equations. This involves taking a Fourier transform of $\bm{f}$, solving Eqs.\ \eqref{eq:S1} and \eqref{eq:S2} in frequency space for $p$ and $\bm{u}$, and then taking an inverse FT. 
 
-The following table was generated using $n=128$ grid points in each dimension and with boundary points and forces generated randomly.\\
+In an IB-type formulation, the immersed structures (in our case fibers and/or spheres) are represented using a Lagrangian description, while the fluid quantities $\bm{u}$ and $p$ are represented on a collocated Eulerian grid. The IB method relies on a set of discrete interaction equations to obtain the force density on the grid from the Lagrangian force on the structures, and the velocity at the structures from the velocity on the grid. 
 
-\begin{tabular}{|c||l|l|l|}
+More specifically, let $\Gamma$ denote the Lagrangian domain, parameterized by material parameter $\bm{q}$ and $\Omega$ denote the fluid domain (a uniform grid with spacing $h$). The first interaction equation for the force density is 
+\begin{equation}
+\label{eq:spread}
+\bm{f}(\bm{x}) = \bm{\mathcal{S}} \bm{F}  = \int_{\Gamma}  \bm{F}(\bm{q},t) \delta_h (\bm{x} - \bm{X}(\bm{q},t))\, d \bm{q}  \approx \sum_{\bm{q}} \bm{F}(\bm{q},t) \delta_h (\bm{x} - \bm{X}(\bm{q},t)) \Delta \bm{q}. 
+\end{equation}
+Eq.\ \eqref{eq:spread} defines the \textit{spreading} operator $\bm{\mathcal{S}}$ and is used to calculate the force density $\bm{f}$ on the grid. $\delta_h$ is the classical 4 point regularized delta function of Peskin \cite{peskin2002acta}. This function has the form
+\begin{equation}
+\delta_h(\bm{x}) = \frac{1}{h^3} \phi\left(\frac{x_1}{h}\right) \phi\left(\frac{x_2}{h}\right) \phi\left(\frac{x_3}{h}\right), 
+\end{equation}
+where $\phi(x)$ is some kernel with support on $-2 \leq x \leq 2$. See \cite{peskin2002acta} for more details for the derivation of the kernel. 
+
+
+After spreading the force to the grid via $\bm{f}=\bm{\mathcal{S}}\bm{F}$, the Stokes equations are solved on the periodic domain via a spectral method. The structures are updated with the local fluid velocity, satisfying the no-slip boundary condition,
+\begin{equation}
+\label{eq:interp}
+\frac{d \bm{X}}{dt} = \bm{U}(\bm{X}(\bm{q},t)) =\bm{S}^* \bm{u} = \int_{\Omega} \bm{u} (\bm{x},t) \delta_h(\bm{x}-\bm{X}(\bm{q},t)\, d\bm{x} \approx \sum_{\bm{x}} \bm{u}(\bm{x},t) \delta_h (\bm{x} - \bm{X}(\bm{q},t)) h^3. 
+\end{equation}
+In Eq.\ \eqref{eq:interp}, we have defined the \textit{interpolation} operator $\bm{S}^*$ that acts on the fluid grid velocity $\bm{u}$ to obtain the velocity at the structure points $\bm{U}$. 
+
+To summarize, the IB method is composed of the following steps
+\begin{enumerate}
+\item Given a configuration of the Lagrangian structures $\bm{X}$, compute the force $\bm{F}$ on the structure points. 
+\item Spread the force to the grid via Eq.\ \eqref{eq:spread}
+\item Solve the fluid equations on the grid via a spectral method. 
+\item Interpolate the velocity from the grid to the structure via Eq.\ \eqref{eq:interp}
+\item Evolve the structure positions via a forward Euler method. 
+\end{enumerate}
+
+\subsection{Programming aspects}
+In this section, we focus on how we parallelized each of the steps 1-5. 
+
+\subsubsection{Force computation}
+If the immersed structures are fibers (as they are here), the force is computed from stretching and bending. Such a force can be computed point by point and is therefore embarrassingly parallel. In fact, the force computation is generally so fast (relative to the other routines) that it makes little difference whether it is done in parallel or serial. 
+
+\subsubsection{Force spreading}
+The spreading computation, Eq.\ \eqref{eq:spread} is not trivial to parallelize because of the interaction of the points with the grid. For example, 2 nearby points interact with the same grid points, and so attempting to parallelize this interaction in a shared-memory fashion makes little sense since there is only one array of forces on the grid to update. We adopt the scheme of McQueen and Peskin \cite{mcqueen} shown in Fig.\ \ref{fig:parspread}. We divide the grid into columns that run along the $z$ direction. Each column is assigned a number, and the points are ``binned'' into the columns using a linked list (there is an array called ``first'' which has the index of the first point in each column, and an array called ``next'' which has the index of the next point in each column or 0 if the last point has already been selected). 
+
+After the points are assigned bins, we observe that bins whose boundaries are at least 3 mesh-widths apart will not interact with the same grid points, since the support of the $\delta_h$ function is 2 mesh-widths. We can therefore spread all of the points in these bins (colored in black in Fig.\ \ref{fig:parspread} in parallel. We refer to this operation as the spreading of one grid ``color.'' We then move the colors over by one and repeat. In all, there are sixteen colors, which are looped over in serial. Within each color, we loop over the bins in parallel and increment the array for forces on the grid accordingly. 
+
+\subsubsection{Fluid solver}
+The fluid solver is based on FFTs and is therefore built around calling the FFTW library. We have experimented with OpenMP parallel FFTW and MPI parallel FFTW.
+
+\subsubsection{Interpolation}
+After the velocity on the grid is computed, we need to use Eq.\ \eqref{eq:interp} to obtain the velocities at each point. Fortunately, this operation is embarrassingly parallel. The array of velocities on the grid comes from the fluid solver and only needs to be accessed (but not modified) to determine the velocity at each point. We can therefore loop over the points in parallel to obtain their velocities. 
+
+\subsubsection{Evolving the structure}
+In the forward Euler context, this operation is embarrassingly parallel as well. If the velocity of each point on the structure is known from interpolation, we can loop over the points in parallel to get their new position. 
+
+\begin{figure}
+\centering     
+\includegraphics[width=70mm]{PeskinMcQueen.png}
+\caption{Spreading the Lagrangian force to the grid in parallel (taken from \cite{mcqueen}). As in \cite{mcqueen}, we divide the 3D grid into columns and bin the points using a linked list (shown at bottom). There are 2 arrays, one which gives the location of the first point in each bin, and one which gives the location of the next point from the previous point (or 0 if there is no next point). We can then divide the columns into 6 ``colors,'' one of which is shown in black. Within each color, the points in the columns do not interact on the grid, since the support of the $\delta_h$ function is 2 mesh widths in either direction. We can therefore loop over the colors in serial, and the bins within each color in parallel. }
+\label{fig:parspread}
+\end{figure}
+
+
+\section{Results}
+In this section, we consider 2 possible scenarios for the immersed objects. The first is that the objects are a set of randomly distributed \textit{points} with random forces on them. This seems to us to be the most prime for parallelization because the structures are not coupled to each other. As a more realistic case, we consider a system of \textit{fibers}, where the fiber points are connected to each other locally (this should make the spreading routine more difficult to parallelize). For strong scaling, we consider large problems.
+
+\subsection{Strong scaling}
+ We consider 2 cases for the strong scaling study: $10^6$ particles with random forces and 8000 fibers (with 128 points each) that are initially curved. In all cases, the grid size $256^3$ and is chosen so that the spreading, fluid solve, and interpolation times are approximately equal over 1 core (we will then study what happens to each as we increase the number of cores). We note that these are large problems, and are therefore ripe for parallelization. 
+
+We concern ourselves with the time to \textit{spread} the force to the grid, \textit{solve} the fluid equations on the grid, and \textit{interpolate} back to evaluate the velocities at the points (included in this is the time to take a forward Euler step to update the points). We have run this test on \texttt{crunchy1} and results were averaged over 2 trials. 
+
+Fig.\ \ref{fig:Strong} shows the results of the strong scaling study. We see that, for both fibers and particles, interpolation scales extremely well with the number of cores. In fact, as we move from 1 to 32 cores, we obtain almost ideal scaling of interpolation. Spreading is slightly more complex; while the computation time does drop as we increase the number of cores, it is slow (relative to ideal scaling). This is likely due to memory bounds, as the array ``first'' must be accessed, even for empty bins. Furthermore, part of the force computation is to bin the points, which we currently do in serial because the arrays ``first'' and ''next'' depend on results from prior points. We are therefore bound Amdahl's law. This bound could be reduced by parallelizing the binning of points that are well separated. That said, we have still reduced the time for spreading by about an order of magnitude from 1 to 64 cores. 
+
+Finally, the fluid solve is the slowest operation. 
+
+\begin{figure}
+\centering     
+\subfigure[$10^6$ particles]{\label{fig:SP}\includegraphics[width=70mm]{StrongScPoints.eps}}
+\subfigure[8000 fibers]{\label{fig:SF}\includegraphics[width=70mm]{StrongScFibers.eps}}
+\caption{Time to spread forces (blue circles), fluid solve (red squares), and interpolate velocities (black diamonds) for (a) $10^6$ fluid markers and (b) 8000 fibers of 128 markers each as a function of the number of processors. Ideal scaling is also shown, and interpolation is observed to scale best, while the fluid solve barely scales, indicating memory bounds. }
+\label{fig:Strong}
+\end{figure}
+
+\iffalse
+\begin{table}
+\centering
+\begin{tabular}{|c||l|l|l|l|l|l|l|}
 	\hline
 	\multirow{2}{*}{Task} 
-	& \multicolumn{3}{c||}{Time (s)}  \\
-	& 1 Thread & 2 Threads & 4 Threads  \\  \hline
-	Force Calculation & 0.0005 & 0.000143 & 0.000194  \\      \hline
-	Array Initialization & 0.02 & 0.014 & 0.0067  \\      \hline
-	Force Spreading & 0.02 & 0.011 & 0.066 \\ \hline
-	Fluid Solve & 0.5 & 0.39 & 0.33 \\ \hline
-	Velocity Interpolation & 0.00026& 0.00018& 0.00016\\ \hline 
+	& \multicolumn{7}{c|}{Time (s)}  \\
+	& 1 Thread & 2 & 4 & 8 & 16 & 32 & 64 \\  \hline
+	Spread & 17.3 & 11.2 & 10.8 &9.2 &  5.9 & 4.5 & 3.8\\      \hline
+	Solve & 13.2 & 11.0  & 10.3 & 8.7 & 8.2  & 9.3 & 9.2\\      \hline
+	Interpolate & 12.6 & 7.0 & 3.6 & 1.8 & 0.9 & 0.6 & 0.5\\  \hline
 \end{tabular}
-\\
+\caption{Results of strong scaling analysis for points.}
+\label{tab:ptsc}
+\end{table}
 
-Similar results are achieved using the single fiber as well...
+\begin{table}
+\centering
+\begin{tabular}{|c||l|l|l|l|l|l|l|}
+	\hline
+	\multirow{2}{*}{Task} 
+	& \multicolumn{7}{c|}{Time (s)}  \\
+	& 1 Thread & 2 & 4 & 8 & 16 & 32 & 64\\  \hline
+	Spread & 15.2 & 13.0 & 12.3  & 7.1 & 5.2 & 2.6 & 2.0\\      \hline
+	Solve & 13.8 & 11.3  & 10.8  & 10.3 & 10.0 & 8.5 & 9.4\\      \hline
+	Interpolate & 11.9 & 6.0 & 3.2 & 1.6 & 0.9 & 0.4 & 0.4\\  \hline
+\end{tabular}
+\caption{Results of strong scaling analysis for fibers.}
+\label{tab:fibsc}
+\end{table}
+\fi
+
+
+\newpage
+\bibliographystyle{plain}
+
+\bibliography{IBBib}
 
 \end{document}
