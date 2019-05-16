@@ -87,7 +87,7 @@ The spreading computation, Eq.\ \eqref{eq:spread} is not trivial to parallelize 
 After the points are assigned bins, we observe that bins whose boundaries are at least 3 mesh-widths apart will not interact with the same grid points, since the support of the $\delta_h$ function is 2 mesh-widths. We can therefore spread all of the points in these bins (colored in black in Fig.\ \ref{fig:parspread} in parallel. We refer to this operation as the spreading of one grid ``color.'' We then move the colors over by one and repeat. In all, there are sixteen colors, which are looped over in serial. Within each color, we loop over the bins in parallel and increment the array for forces on the grid accordingly. 
 
 \subsubsection{Fluid solver}
-The fluid solver is based on FFTs and is therefore built around calling the FFTW library. We have experimented with OpenMP parallel FFTW and MPI parallel FFTW.
+The fluid solver is based on FFTs and is therefore built around calling the FFTW library. We have experimented with OpenMP parallel FFTW and MPI parallel FFTW. The fluid solver gets passed an array of forces in each dimension. The first step is to take the FFT of each of these forces. The Stokes equations can then be solved algebraically in Fourier space for the pressure and velocity in each dimension. An inverse FFT then needs to be performed on the pressure and each velocity, totaling 7 FFTs to be performed.  
 
 \subsubsection{Interpolation}
 After the velocity on the grid is computed, we need to use Eq.\ \eqref{eq:interp} to obtain the velocities at each point. Fortunately, this operation is embarrassingly parallel. The array of velocities on the grid comes from the fluid solver and only needs to be accessed (but not modified) to determine the velocity at each point. We can therefore loop over the points in parallel to obtain their velocities. 
@@ -95,7 +95,6 @@ After the velocity on the grid is computed, we need to use Eq.\ \eqref{eq:interp
 \subsubsection{Evolving the structure}
 In the forward Euler context, this operation is embarrassingly parallel as well. If the velocity of each point on the structure is known from interpolation, we can loop over the points in parallel to get their new position. 
 
-<<<<<<< HEAD
 \begin{figure}
 \centering     
 \includegraphics[width=70mm]{PeskinMcQueen.png}
@@ -114,7 +113,8 @@ We concern ourselves with the time to \textit{spread} the force to the grid, \te
 
 Fig.\ \ref{fig:Strong} shows the results of the strong scaling study. We see that, for both fibers and particles, interpolation scales extremely well with the number of cores. In fact, as we move from 1 to 32 cores, we obtain almost ideal scaling of interpolation. Spreading is slightly more complex; while the computation time does drop as we increase the number of cores, it is slow (relative to ideal scaling). This is likely due to memory bounds, as the array ``first'' must be accessed, even for empty bins. Furthermore, part of the force computation is to bin the points, which we currently do in serial because the arrays ``first'' and ''next'' depend on results from prior points. We are therefore bound Amdahl's law. This bound could be reduced by parallelizing the binning of points that are well separated. That said, we have still reduced the time for spreading by about an order of magnitude from 1 to 64 cores. 
 
-Finally, the fluid solve is the slowest operation. 
+Finally, the fluid solve is the slowest operation. This is to be expected, as it is the most complicated routine in the algorithm. The parallelization in the fluid solve comes from evaluating the 3D FFT of the forces, and subsequent inverse FFTs, in parallel using the FFTW3 library. However, this is far from the only step in the fluid solve. The creation, destruction, and execution of the FFTs are performed in serial, as well as array initialization and the algebraic computations necessary for the Poisson solve in Fourier space. Amdahl's law takes effect here, which is why the fluid solve seems to reach a lower bound in its computation time. 
+
 
 \begin{figure}
 \centering     
@@ -123,6 +123,22 @@ Finally, the fluid solve is the slowest operation.
 \caption{Time to spread forces (blue circles), fluid solve (red squares), and interpolate velocities (black diamonds) for (a) $10^6$ fluid markers and (b) 8000 fibers of 128 markers each as a function of the number of processors. Ideal scaling is also shown, and interpolation is observed to scale best, while the fluid solve barely scales, indicating memory bounds. }
 \label{fig:Strong}
 \end{figure}
+
+\subsection{Weak Scaling}
+
+
+\begin{figure}
+	\centering     
+	\includegraphics[width=70mm]{WeakScFibers.eps}
+\caption{Weak scaling study for the 3 main routines of the immersed boundary method; spread, fluid solve, and interpolation. The initial test with 1 core uses a $64\times64\times64$ grid with 1000 fibers.  The number of cores is multiplied by $8$ in each successive test, in which the grid size is doubled. Interpolation scales well, remaining nearly constant in compute time, whereas spreading and solving do not scale well.}
+\label{fig:Weak}
+\end{figure}
+
+For our weak scaling study, we restrict ourselves to the case of immersed fibers. We start by using a single core with 1000 fibers on a grid of size $64^3$. We then want to make sure every processor does the same amount of work as we increase the problem size. We do this by properly scaling the number of Lagrangian points that need to be worked on. If the grid size is doubled, the number of grid points increases by a factor of 8. We then need $8$ times as many points on the fibers (to maintain the $2$ points per mesh-width heuristic). Thus, we should use $8$ time as many cores every time the grid size is doubled. 
+
+Fig.\ \ref{fig:Weak} shows the results of the weak scaling study, performed on Crunchy1. As before, the interpolation step scales nearly ideally, taking an almost constant amount of time for the increasing problem size. Spread and interpolate do not scale nearly as well, taking $8$ to $10$ times longer, despite having to do a similar amount of work. This is not surprising for the fluid solve, as we previously saw this step was the bottleneck in the strong scaling study. However, the spread scales just as poorly as the fluid solve in the weak sense, despite the noticeable speed ups in the strong scaling study. This is likely due to the fact that when the problem size increases, we do not spread the work evenly across processors, as points are concentrated in the same area. It is likely that there is a large load imbalance here, as well as memory effects mentioned previously. 
+
+
 
 
 
