@@ -15,12 +15,14 @@ IF(USE_OpenMP)
 ENDIF()
 
 # Set your fftw3 path here. Only works with cmake install of fftw3
-SET(FFTW3_DIR "/home/anthony/fftw-3.3.8")
-find_package(FFTW3 REQUIRED)
+#SET(FFTW3_DIR "/home/anthony/fftw-3.3.8")
+#find_package(FFTW3 REQUIRED)
 
 add_subdirectory(solver)
 include_directories(solver)
 add_subdirectory(boundary)
 include_directories(boundary)
 add_subdirectory(exe)
+
+file(COPY input DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/exe)
 
