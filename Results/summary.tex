@@ -115,7 +115,7 @@ Fig.\ \ref{fig:Strong} shows the results of the strong scaling study. We see tha
 
 Finally, the fluid solve is the slowest operation. This is to be expected, as it is the most complicated routine in the algorithm. The parallelization in the fluid solve comes from evaluating the 3D FFT of the forces, and subsequent inverse FFTs, in parallel using the FFTW3 library. However, this is far from the only step in the fluid solve. The creation and destruction of the FFTs are performed in serial, as well as array initialization and the algebraic computations necessary for the Poisson solve in Fourier space. Amdahl's law takes effect here, which is why the fluid solve seems to reach a lower bound in its computation time. 
 
-
+In order to show that it is possible to have a better scaling fluid solve system, we implemented an MPI-version of the fluid solve. As we only have implemented shared memory interpolation and spreading routines, we shall do the fluid-structure interaction in shared memory, scatter the forces to several processes, using our MPI solver, and then gathering the fluid velocity. Because of this process, we report three times, the time for the fluid solve alone, the time for the fluid solve and FFTs and the time that includes scattering and gathering. Fig.\ \ref{fig:StrongMPI} shows the results of this strong scaling test. We see in this plot that, while ideal scaling is not reached, significant speed-ups are still achieved. 
 \begin{figure}
 \centering     
 \subfigure[$10^6$ particles]{\label{fig:SP}\includegraphics[width=70mm]{StrongScPoints.eps}}
