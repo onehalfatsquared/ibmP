@@ -147,6 +147,17 @@ For our weak scaling study, we restrict ourselves to the case of immersed fibers
 
 Fig.\ \ref{fig:Weak} shows the results of the weak scaling study, performed on Crunchy1. As before, the interpolation step scales nearly ideally, taking an almost constant amount of time for the increasing problem size. Spread and interpolate do not scale nearly as well, taking $8$ to $10$ times longer, despite having to do a similar amount of work. This is not surprising for the fluid solve, as we previously saw this step was the bottleneck in the strong scaling study. However, the spread scales just as poorly as the fluid solve in the weak sense, despite the noticeable speed ups in the strong scaling study. This is likely because the increased problem size results in increased serial computations when binning the points. 
 
+\section{Conclusions}
+Here we implemented a parallelized version of the Immersed Boundary Method, in which we constructed a problem such that on one core, each of the major components of the code, spread, solve, and interpolate, take a similar amount of time. We then parallelized each of these routines to see which scale and which do not. We find that the embarrassingly parallel interpolation routine scales ideally up to the $64$ cores we tested on. The spreading routine sees speed up, but it is less than ideal. We attribute this to Amdahl's law and the serial components of the spreading routine. The major bottleneck is the fluid solve, which utitlizes the parallel FFTW3 library, which we find does not scale at all in the OpenMP framework. However, by implementing the solver in MPI, we see it scales well, much better than the OpenMP implementation.  
+
+
+\section{Work Distribution}
+Ondrej Maxian worked on initialization of the solver and the immersed boundary class, the routines for calculating forces, spreading forces, and interpolating velocities, and the OMP parallelized versions of these routines. \\
+
+Anthony Trubiano worked on importing FFTW3 libraries, creating a build system, the Stokes fluid solver, and the OMP parallelization of the FFTs involved in the fluid solver.\\
+
+Tristan Goodwill worked on implementing the fluid solver entirely in an MPI framework, using the MPI version of the FFTW3 parallel library. \\
+
 
 
 
