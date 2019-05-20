@@ -197,6 +197,7 @@ void poissonSolve3D(int nx, int ny, int nz, double Lx, double Ly, double Lz, dou
 	double kx, ky, kz, k2;
 	double fuRe, fuIm, fvRe, fvIm, fwRe, fwIm, dRe, dIm;
 	int rowIndex, columnIndex;
+	//#pragma omp parallel for
 	for (int i = 0; i < nx; i++) {
 		kx = freqX[i]*2.0*M_PI/Lx;
 		for (int j = 0; j < ny; j++) {
