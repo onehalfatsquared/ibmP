@@ -14,23 +14,18 @@
 
 #define NUM_PLANS2 5
 #define NUM_PLANS3 7
+#define FFT_PLANNING FFTW_ESTIMATE
 
 int threads_ok;
-//int main(int argc, char **argv){
-//  MPI_Init(&argc, &argv);
-//  fftw_complex a[2];
-//
-//  int fftw_mpi_init(void);
-//
-//  MPI_Finalize();
-//}
 
-
-void print_array3D(double *a, int nx, int ny, int nz){
+void print_array3D(double *a, int nx, int ny, int nz, bool fft_format){
+  long nzz;
+  if (fft_format){nzz = 2*(nz/2+1);}
+  else {nzz = nz;}
   for(int i=0; i<nx; i++){
     for(int j=0; j<ny; j++){
       for(int k=0; k<nz; k++){
-        printf("%f\t", a[(i*ny+j)*2*(nz/2+1) + k]);
+        printf("%4.3f\t", a[(i*ny+j)*nzz + k]);
       }
       printf("\n");
     }
@@ -43,7 +38,7 @@ void print_hat_array3D(fftw_complex *a, const ptrdiff_t *ns){
   for(int i=0; i<ns[1]; i++){
     for(int j=0; j<ns[0]; j++){
       for(int k=0; k<ns[2]/2+1; k++){
-        printf("%5.2f+i %5.2f\t", a[(i*ns[0]+j)*(ns[2]/2+1)+k][0], a[(i*ns[0]+j)*(ns[2]/2+1)+k][1]);
+        printf("%6.4f+i %6.4f\t", a[(i*ns[0]+j)*(ns[2]/2+1)+k][0], a[(i*ns[0]+j)*(ns[2]/2+1)+k][1]);
       }
       printf("\n");
     }
@@ -51,6 +46,33 @@ void print_hat_array3D(fftw_complex *a, const ptrdiff_t *ns){
   }
   printf("--------------------------------------\n");
 }
+
+void shift_format(double *a, const ptrdiff_t  *ns, ptrdiff_t  *local_n, bool to_fft){
+  long indx, pad_indx;
+
+  if (to_fft){
+    for(long i=local_n[0]-1; i>=0; i--){
+      for(long j=ns[1]-1; j>=0; j--){
+        for(long k=ns[2]-1; k>=0; k--){
+          indx = (i*ns[1]+j)*ns[2] +k;
+          pad_indx = (i*ns[1]+j)*2*(ns[2]/2+1)+k;
+          a[pad_indx] = a[indx];
+        }
+      }
+    }
+  } else {
+    for(long i=0; i<local_n[0]; i++){
+      for(long j=0; j<ns[1]; j++){
+        for(long k=0; k<ns[2]; k++){
+          indx = (i*ns[1]+j)*ns[2] +k;
+          pad_indx = (i*ns[1]+j)*2*(ns[2]/2+1)+k;
+          a[indx] = a[pad_indx];
+        }
+      }
+    }
+  }
+}
+
 void init_data2D(double** physical, fftw_complex** hatted, const ptrdiff_t* ns,
     ptrdiff_t* local_n, fftw_plan* P){
   // We wish intialize the variables U = (u,v), p, F = (fu, fv)
@@ -164,20 +186,20 @@ void init_data3D(double** physical, fftw_complex** hatted, const ptrdiff_t* ns,
 
   /* create plan for out-of-place r2c DFT */
   P[0] = fftw_mpi_plan_dft_r2c_3d(ns[0], ns[1], ns[2], physical[4], hatted[4], MPI_COMM_WORLD,
-      FFTW_MEASURE | FFTW_MPI_TRANSPOSED_OUT); // fx
+      FFT_PLANNING | FFTW_MPI_TRANSPOSED_OUT); // fx
   P[1] = fftw_mpi_plan_dft_r2c_3d(ns[0], ns[1], ns[2], physical[5], hatted[5], MPI_COMM_WORLD,
-      FFTW_MEASURE | FFTW_MPI_TRANSPOSED_OUT); // fy
+      FFT_PLANNING | FFTW_MPI_TRANSPOSED_OUT); // fy
   P[2] = fftw_mpi_plan_dft_r2c_3d(ns[0], ns[1], ns[2], physical[6], hatted[6], MPI_COMM_WORLD,
-      FFTW_MEASURE | FFTW_MPI_TRANSPOSED_OUT); // fy
+      FFT_PLANNING | FFTW_MPI_TRANSPOSED_OUT); // fy
 
   P[3] = fftw_mpi_plan_dft_c2r_3d(ns[0], ns[1], ns[2], hatted[0], physical[0], MPI_COMM_WORLD,
-      FFTW_MEASURE | FFTW_MPI_TRANSPOSED_IN); //ux
+      FFT_PLANNING | FFTW_MPI_TRANSPOSED_IN); //ux
   P[4] = fftw_mpi_plan_dft_c2r_3d(ns[0], ns[1], ns[2], hatted[1], physical[1], MPI_COMM_WORLD,
-      FFTW_MEASURE | FFTW_MPI_TRANSPOSED_IN); //uy
+      FFT_PLANNING | FFTW_MPI_TRANSPOSED_IN); //uy
   P[5] = fftw_mpi_plan_dft_c2r_3d(ns[0], ns[1], ns[2], hatted[2], physical[2], MPI_COMM_WORLD,
-      FFTW_MEASURE | FFTW_MPI_TRANSPOSED_IN); //p
+      FFT_PLANNING | FFTW_MPI_TRANSPOSED_IN); //p
   P[6] = fftw_mpi_plan_dft_c2r_3d(ns[0], ns[1], ns[2], hatted[3], physical[3], MPI_COMM_WORLD,
-      FFTW_MEASURE | FFTW_MPI_TRANSPOSED_IN); //p
+      FFT_PLANNING | FFTW_MPI_TRANSPOSED_IN); //p
 }
 
 void clean_data3D(double** physical, fftw_complex** hatted, fftw_plan* P){
@@ -196,31 +218,33 @@ void poissonSolve3D_mpi(const ptrdiff_t* ns, const double* Ls, double mu,  fftw_
   //compute pHat, uHat, vHat, wHat via poisson solves using FFTed forces
   double kx, ky, kz, k2;
   double fuRe, fuIm, fvRe, fvIm, fwRe, fwIm, dRe, dIm;
-  int index;
+  long index, conj_index;
+  long N = ns[0]*ns[1]*ns[2];
 
-#pragma omp parallel for
+  #pragma omp parallel for private(kx, ky, kz, index, conj_index) shared(N)
   for (ptrdiff_t i =0; i < local_n[2]; i++){
-    kx = freq(i+local_n[3], ns[1]/2)*2.*M_PI/Ls[1];
+    ky = freq(i+local_n[3], ns[1]/2)*2.*M_PI/Ls[1];
     for (ptrdiff_t j = 0; j <ns[0]; j++){
-      ky = freq(j, ns[0]/2)*2.*M_PI/Ls[0];
+      kx = freq(j, ns[0]/2)*2.*M_PI/Ls[0];
       for (ptrdiff_t k = 0; k <ns[2]/2+1; k++){
         kz = freq(k, ns[2]/2)*2.*M_PI/Ls[2];
         k2 = kx*kx+ky*ky+kz*kz;
         
-        printf("kx = %f, ky = %f, kz = %f, k^2 = %f,\n", kx,ky,kz,k2);
+        //printf("kx = %f, ky = %f, kz = %f, k^2 = %f,\n", kx,ky,kz,k2);
         //not sure if this is indexed correctly
         index = (i*ns[0]+j)*(ns[2]/2+1)+k;
-        fuRe = hatted[4][index][0]; fuIm = hatted[4][index][1];
-        fvRe = hatted[5][index][0]; fvIm = hatted[5][index][1];
-        fwRe = hatted[6][index][0]; fwIm = hatted[6][index][1];
+        conj_index = (i*ns[0]+(ns[0]-j))*(ns[2]/2+1)+k;
+        fuRe = hatted[4][index][0]/N; fuIm = hatted[4][index][1]/N;
+        fvRe = hatted[5][index][0]/N; fvIm = hatted[5][index][1]/N;
+        fwRe = hatted[6][index][0]/N; fwIm = hatted[6][index][1]/N;
         if (i == 0 && j == 0 && k == 0) { //0 mode, handle seperately
-          dRe = 0.0; dIm = 0.0; k2 = 1.0;
+          dRe = 0.0; dIm = 0.0; k2 = N;
         }
         else{ //compute divfHat
           dRe = -kx*fuIm-ky*fvIm-kz*fwIm;
           dIm = kx*fuRe+ky*fvRe+kz*fwRe;
         }
-        k2 *= ns[0]*ns[1]*ns[2];
+        //k2 *= ns[0]*ns[1]*ns[2];
         //solve for pHat
         hatted[3][index][0] = -dRe/k2; hatted[3][index][1] = -dIm/k2;
         //solve for uHat
@@ -232,9 +256,9 @@ void poissonSolve3D_mpi(const ptrdiff_t* ns, const double* Ls, double mu,  fftw_
         //solve for wHat
         hatted[2][index][0] = (fwRe + kz*hatted[3][index][1])/(mu*k2);
         hatted[2][index][1] = (fwIm - kz*hatted[3][index][0])/(mu*k2);
+
       }
     }
-
   }
 }
 
@@ -351,13 +375,8 @@ void threeD_Example(){
         physical[0][real_idx] = 2*M_PI*cos(2*M_PI*(i+local_n[1])/ns[0]);
         //physical[5][real_idx] = pow(sin(2*M_PI*(i+local_n[1])/ns[0]),5);
         //physical[0][real_idx] = 10*M_PI*pow(sin(2*M_PI*(i+local_n[1])/ns[0]),4)*cos(2*M_PI*(i+local_n[1])/ns[0]);
-        //printf("%f \t", physical[3][i*2*(ns[1]/2+1)+j]);
-        //printf("%f \t", physical[0][real_idx]);
       }
-    //printf("\n");
     }
-    //printf("\n");
-    //printf("\n");
   }
   
   fftw_execute(P[0]);
@@ -375,17 +394,11 @@ void threeD_Example(){
         f_idx = (i*ns[0]+j)*(ns[2]/2+1)+k;
         hatted[1][f_idx][0] = hatted[4][f_idx][0]/ns[0]/ns[1]/ns[2];
         hatted[1][f_idx][1] = hatted[4][f_idx][1]/ns[0]/ns[1]/ns[2];
-        //printf("%f %f\t", hatted[1][i*ns[0]+j][0], hatted[1][i*ns[0]+j][1]); 
-
 
         hatted[2][f_idx][0] = -ky*hatted[5][f_idx][1]/ns[0]/ns[1]/ns[2];
         hatted[2][f_idx][1] = ky*hatted[5][f_idx][0]/ns[0]/ns[1]/ns[2];
-        //printf("%f %f\t", hatted[2][f_idx][0], hatted[2][f_idx][1]); 
       }
-      //printf("\n");
     }
-    //printf("\n");
-    //printf("\n");
   }
 
   fftw_execute(P[4]);
@@ -398,14 +411,10 @@ void threeD_Example(){
     for (ptrdiff_t j = 0; j <ns[1]; j++){
       for (ptrdiff_t k = 0; k <ns[2]; k++){
         real_idx = (i*ns[1]+j)*2*(ns[2]/2+1) + k;
-        //error += (physical[1][i*2*(ns[1]/2+1)+j] -physical[3][i*2*(ns[1]/2+1)+j])*(physical[1][i*2*(ns[1]/2+1)+j] -physical[3][i*2*(ns[1]/2+1)+j]) ;
-        //printf("%f \t", physical[2][real_idx]);
-        error += (physical[0][real_idx] -physical[2][real_idx])*(physical[0][real_idx] -physical[2][real_idx]) ;
+        error += (physical[1][i*2*(ns[1]/2+1)+j] -physical[4][i*2*(ns[1]/2+1)+j])*(physical[1][i*2*(ns[1]/2+1)+j] -physical[4][i*2*(ns[1]/2+1)+j]) ;
+        //error += (physical[0][real_idx] -physical[2][real_idx])*(physical[0][real_idx] -physical[2][real_idx]) ;
       }
-      //printf("\n");
     }
-    //printf("\n");
-    //printf("\n");
   }
 
   //printf("Hello \n");
@@ -423,8 +432,8 @@ void Fluid_solve_MPI(double **f, double **u, int nx, int ny, int nz, double mu){
   MPI_Comm_size(MPI_COMM_WORLD, &p);
 
   const ptrdiff_t ns[3] = {nx, ny, nz};
-  long Nex = 2*ns[1]*(ns[2]/2+1);
-  const double Ls[3] = {1, 1, 1};
+  long Nex = ns[1]*ns[2];//2*(ns[2]/2+1);
+  const double Ls[3] = {1,1,1};
   ptrdiff_t real_idx, f_idx;
   fftw_plan P[NUM_PLANS3];
 
@@ -451,37 +460,29 @@ void Fluid_solve_MPI(double **f, double **u, int nx, int ny, int nz, double mu){
   MPI_Gather(local_n, 2, FFTW_MPI_PTRDIFF_T, global_idxs, 2, FFTW_MPI_PTRDIFF_T,
       0, MPI_COMM_WORLD);
 
-  //printf("Gather successful\n"); 
   if(rank==0){
     for(int i=0; i<p; i++){
       global_ns[i]   =global_idxs[2*i]*Nex;
       global_diss[i] =global_idxs[2*i+1]*Nex;
-      //printf("n = %d, dis = %d\n", global_ns[i], global_diss[i]);
-      //printf("n = %d, dis = %d\n", global_idxs[2*i]*ns[1]*ns[2],global_idxs[2*i+1]*ns[1]*ns[2]);
-      //printf("n = %d, dis = %d\n", local_n[0], local_n[1]);
     }  
   }
-  //printf("Extraction successful\n"); 
   for(int i=0; i<3; i++){
-    //printf("Sending i = %d\n", i);
     MPI_Scatterv(f[i], global_ns, global_diss, MPI_DOUBLE, physical[4+i],
         local_n[0]*Nex, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-  }
-
-  //printf("Scatter successful\n"); 
-  fluid_solve_3D_mpi(physical, hatted, ns, Ls, mu, local_n, P);
-     
-  //print_array3D(physical[3], nx, ny, nz);
-  print_hat_array3D(hatted[4], ns);
-  print_hat_array3D(hatted[5], ns);
-  print_hat_array3D(hatted[6], ns);
-  print_hat_array3D(hatted[3], ns);
-  //printf("Solve successful\n"); 
-  for(int i=0; i<4; i++){
-    MPI_Gatherv(physical[i],local_n[0]*Nex, MPI_DOUBLE, u[i], global_ns, global_diss, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    shift_format(physical[4+i], ns, local_n, 1);
   }
   
-  //printf("Gather successful\n"); 
+  double tt = MPI_Wtime();
+  fluid_solve_3D_mpi(physical, hatted, ns, Ls, mu, local_n, P);
+  if(rank==0) printf("Time to solve was %f\n",MPI_Wtime()-tt);   
+  //print_array3D(physical[3], nx, ny, nz, 1);
+  //print_hat_array3D(hatted[0], ns);
+  //
+  for(int i=0; i<4; i++){
+    shift_format(physical[i], ns, local_n, 0);
+    MPI_Gatherv(physical[i],local_n[0]*Nex, MPI_DOUBLE, u[i], global_ns, global_diss, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+  }
+
   MPI_Barrier(MPI_COMM_WORLD);
 
   clean_data3D(physical, hatted, P);
@@ -496,12 +497,12 @@ void Fluid_test(int n){
   MPI_Comm_size(MPI_COMM_WORLD, &p);
 
   long nx=n, ny=n, nz=n;
-  long N = nx*ny*2*(nz/2+1);
+  long N = nx*ny*nz;
   double *f[3], *u[4], *u_True[4];
 
   long idx;
   double tpi = 2*M_PI, x, y, z;
-  double mu = .0;
+  double mu = 10.;
   if(rank==0){
     for(int i=0; i<3; i++){
       f[i] = fftw_alloc_real(N);
@@ -510,15 +511,14 @@ void Fluid_test(int n){
     }
     u[3] = fftw_alloc_real(N);
     u_True[3] = fftw_alloc_real(N);
-   
-    printf("Allocation successful\n"); 
+    #pragma omp parallel for private(idx, x, y, z)
     for(long i=0; i<nx; i++){
       for(long j=0; j<ny; j++){
         for(long k=0; k<nz; k++){
-          idx = (i*ny+j)*2*(nz/2+1) +k;
+          idx = (i*ny+j)*nz +k;
           x = (double)i/nx; y = (double)j/ny; z = (double)k/nz;
           x = tpi*x; y=tpi*y;z = tpi*z;
-          f[0][idx] = tpi*(3*mu*tpi*cos(y)*sin(x)+cos(x)*sin(y))*sin(z);
+          f[0][idx] = tpi*(3.*mu*tpi*cos(y)*sin(x)+cos(x)*sin(y))*sin(z);
           f[1][idx] = tpi*(cos(y)*sin(x)-1.5*tpi*mu*cos(x)*sin(y))*sin(z);
           f[2][idx] = tpi*(1.5*mu*tpi*cos(y)*cos(x)+sin(x)*sin(y))*cos(z);
            
@@ -531,25 +531,23 @@ void Fluid_test(int n){
         }
       }
     }
+    printf("Initialization successful\n"); 
   }
   
   double tt = MPI_Wtime();
-  printf("Initialization successful\n"); 
   Fluid_solve_MPI(f, u, nx, ny, nz, mu);
 
-  printf("Solve successful, time ellapsed = %f\n", MPI_Wtime()-tt); 
   if(rank==0){//Compare and Clean-up
+    printf("Solve successful, time ellapsed = %f\n", MPI_Wtime()-tt); 
     double erroru=0, errorv=0, errorw=0, errorp=0;
 
-    //print_array3D(f[0], nx, ny, nz);
-    print_array3D(f[0], nx, ny, nz);
-    print_array3D(u[3], nx, ny, nz);
-    print_array3D(u_True[3], nx, ny, nz);
+    //print_array3D(u[3], nx, ny, nz,0);
+    //print_array3D(u_True[3], nx, ny, nz,0);
 
     for(long i=0; i<nx; i++){
       for(long j=0; j<ny; j++){
         for(long k=0; k<nz; k++){
-          idx = (i*ny+j)*2*(nz/2+1) +k;
+          idx = (i*ny+j)*nz +k;
           erroru += abs(u[0][idx]-u_True[0][idx]);
           errorv += abs(u[1][idx]-u_True[1][idx]);
           errorw += abs(u[2][idx]-u_True[2][idx]);
@@ -580,6 +578,6 @@ int main(int argc, char **argv){
   if (threads_ok) fftw_plan_with_nthreads(omp_get_max_threads());
 
   //threeD_Example();
-  Fluid_test(8);
+  Fluid_test(256);
   MPI_Finalize();
 }
