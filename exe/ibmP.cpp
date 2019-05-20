@@ -115,6 +115,8 @@ int main(int argc, char* argv[]) {
 	double iTime = omp_get_wtime();
 	printf("Interpolate time is %f \n", iTime-fTime);
 
+	//for (int i = 0; i < n; i++) printf("%f\n", u[i]);
+
 	//free the memory and return
 	free(gridFX); free(gridFY); free(gridFZ); free(u); free(v); free(w); free(p);
 	free(xEpts); free(yEpts); free(zEpts);
