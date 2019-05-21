@@ -24,7 +24,7 @@ ImmersedFiber::ImmersedFiber(double L, double k, double kb, int N, int Nfib, int
 	_h = _L/((double)_NIB-1.0); //point spacing
 	std::mt19937_64 rng;
     	rng.seed(0);
-	std::uniform_real_distribution<double> unif(-_L*0.5, _L*0.5);
+	std::uniform_real_distribution<double> unif(-_L*0.5*10, _L*0.5*10);
 	_xIB = (double*) malloc(_NIB*_Nfib*sizeof(double));
 	_yIB = (double*) malloc(_NIB*_Nfib*sizeof(double));
 	_zIB = (double*) malloc(_NIB*_Nfib*sizeof(double));
@@ -186,9 +186,9 @@ void ImmersedFiber::binPoints(double he, double ax, double bx, double ay, double
     double xImage, yImage;
     for (int iPt=0; iPt < _NIB*_Nfib; iPt++){
         xImage = (_xIB[iPt]-ax)/(bx-ax);
-        xImage = _xIB[iPt] - ((double)(xImage > 0))*floor(abs(xImage));
+        xImage = _xIB[iPt] - floor(xImage)*(bx-ax);
         yImage = (_yIB[iPt]-ay)/(by-ay);
-        yImage = _yIB[iPt] - ((double)(yImage > 0)*floor(abs(yImage)));
+        yImage = _yIB[iPt] - floor(yImage)*(by-ay);
         int binNum=floor((xImage-ax)/he)+floor((yImage-ay)/he)*Nx;
         //cout << "Point " << iPt << " location " << xIB[iPt] << " , " << yIB[iPt] << endl;
         //cout << "Image: " << xImage << " , " << yImage << " and bin " << binNum << endl;
