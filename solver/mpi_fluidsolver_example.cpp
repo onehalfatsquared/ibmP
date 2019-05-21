@@ -14,7 +14,7 @@
 
 #define NUM_PLANS2 5
 #define NUM_PLANS3 7
-#define FFT_PLANNING FFTW_ESTIMATE
+#define FFT_PLANNING FFTW_MEASURE
 
 int threads_ok;
 
@@ -49,7 +49,7 @@ void print_hat_array3D(fftw_complex *a, const ptrdiff_t *ns){
 
 void shift_format(double *a, const ptrdiff_t  *ns, ptrdiff_t  *local_n, bool to_fft){
   long indx, pad_indx;
-
+  //Shift array format from dense to padded for FFTs, or vice versa
   if (to_fft){
     for(long i=local_n[0]-1; i>=0; i--){
       for(long j=ns[1]-1; j>=0; j--){
@@ -123,19 +123,19 @@ void poissonSolve2D_mpi(const ptrdiff_t* ns, const double* Ls, double mu,  fftw_
   //compute pHat, uHat, vHat via poisson solves using FFTed forces
   double kx, ky, k2;
   double fuRe, fuIm, fvRe, fvIm, dRe, dIm;
-  int index;
+  int index, N=ns[0]*ns[1];
 
-  #pragma omp parallel for
+  #pragma omp parallel for private(kx, ky, kz, index) shared(N)
   for (int i = 0; i < local_n[2]; i++) {
-    kx = freq(i+local_n[3], ns[1]/2)*2*M_PI/Ls[1];
+    ky = freq(i+local_n[3], ns[1]/2)*2*M_PI/Ls[1];
     for (int j = 0; j < ns[0]; j++) {
-      ky = freq(j, ns[0]/2)*2*M_PI/Ls[0];
+      kx = freq(j, ns[0]/2)*2*M_PI/Ls[0];
       k2 = kx*kx+ky*ky;
 
       //not sure if this is indexed correctly
       index = i*ns[0] +j;
-      fuRe = hatted[3][index][0]; fuIm = hatted[3][index][1];
-      fvRe = hatted[4][index][0]; fvIm = hatted[4][index][1];
+      fuRe = hatted[3][index][0]/N; fuIm = hatted[3][index][1]/N;
+      fvRe = hatted[4][index][0]/N; fvIm = hatted[4][index][1]/N;
       if (i == 0 && j == 0) { //0 mode, handle seperately
         dRe = 0.0; dIm = 0.0; k2 = 1.0;
       }
@@ -143,7 +143,7 @@ void poissonSolve2D_mpi(const ptrdiff_t* ns, const double* Ls, double mu,  fftw_
         dRe = -kx*fuIm-ky*fvIm;
         dIm = kx*fuRe+ky*fvRe;
       }
-      k2 *= ns[0]*ns[1];
+      //k2 *= N;
       //solve for pHat
       hatted[2][index][0] = -dRe/k2; hatted[2][index][1] = -dIm/k2;
       //solve for uHat
@@ -159,7 +159,7 @@ void poissonSolve2D_mpi(const ptrdiff_t* ns, const double* Ls, double mu,  fftw_
 
 void fluid_solve_2D_mpi(double** physical, fftw_complex** hatted, const ptrdiff_t* ns, double*
     Ls, double mu, ptrdiff_t* local_n, fftw_plan* P){
-  
+  //Wrapper for solving the 2D Stokes equations
   for(int i=0; i<2; i++) fftw_execute(P[i]);
 
   poissonSolve2D_mpi(ns, Ls, mu, hatted, local_n);
@@ -218,10 +218,10 @@ void poissonSolve3D_mpi(const ptrdiff_t* ns, const double* Ls, double mu,  fftw_
   //compute pHat, uHat, vHat, wHat via poisson solves using FFTed forces
   double kx, ky, kz, k2;
   double fuRe, fuIm, fvRe, fvIm, fwRe, fwIm, dRe, dIm;
-  long index, conj_index;
+  long index;
   long N = ns[0]*ns[1]*ns[2];
 
-  #pragma omp parallel for private(kx, ky, kz, index, conj_index) shared(N)
+  #pragma omp parallel for private(kx, ky, kz, index) shared(N)
   for (ptrdiff_t i =0; i < local_n[2]; i++){
     ky = freq(i+local_n[3], ns[1]/2)*2.*M_PI/Ls[1];
     for (ptrdiff_t j = 0; j <ns[0]; j++){
@@ -265,17 +265,22 @@ void poissonSolve3D_mpi(const ptrdiff_t* ns, const double* Ls, double mu,  fftw_
 
 void fluid_solve_3D_mpi(double** physical, fftw_complex** hatted, const ptrdiff_t* ns, const double*
     Ls, double mu, ptrdiff_t* local_n, fftw_plan* P){
+  //Wrapper for solving the 3D Stokes equations
+  int rank, p;
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  MPI_Comm_size(MPI_COMM_WORLD, &p);
   
   for(int i=0; i<3; i++) fftw_execute(P[i]);
-  //print_hat_array3D(hatted[4], ns);
-  //print_hat_array3D(hatted[5], ns);
-  //print_hat_array3D(hatted[6], ns);
+
+  double tt = MPI_Wtime();
   poissonSolve3D_mpi(ns, Ls, mu, hatted, local_n);
+  if (rank==0)printf("Fourier space time %fs\n",MPI_Wtime()-tt);
 
   for(int i=3; i<NUM_PLANS3; i++) fftw_execute(P[i]);
 }
 
-void twoD_Example(){
+void twoD_Derivative_Ex(){
+  //Compute a derivate spectrally in 2D
   const ptrdiff_t ns[2] = {2048,2048};
   const double Ls[2] = {1, 1}, mu = 1.;
   fftw_plan P[NUM_PLANS2];
@@ -349,7 +354,8 @@ void twoD_Example(){
   printf(" Error is %f \n", error);
 }
 
-void threeD_Example(){
+void threeD_Derivative_Ex(){
+  //Compute a derivate spectrally in 3D
   int n = 8;
   const ptrdiff_t ns[3] = {n,n,n};
   const double Ls[3] = {1, 1, 1}, mu = 1.;
@@ -425,8 +431,8 @@ void threeD_Example(){
 }
 
 
-
 void Fluid_solve_MPI(double **f, double **u, int nx, int ny, int nz, double mu){
+  //Wrapper for taking in forces on main process, and solving the fluid equations using MPI
   int rank, p;
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
   MPI_Comm_size(MPI_COMM_WORLD, &p);
@@ -466,15 +472,16 @@ void Fluid_solve_MPI(double **f, double **u, int nx, int ny, int nz, double mu){
       global_diss[i] =global_idxs[2*i+1]*Nex;
     }  
   }
+  double tcomm = MPI_Wtime();
   for(int i=0; i<3; i++){
     MPI_Scatterv(f[i], global_ns, global_diss, MPI_DOUBLE, physical[4+i],
         local_n[0]*Nex, MPI_DOUBLE, 0, MPI_COMM_WORLD);
     shift_format(physical[4+i], ns, local_n, 1);
   }
-  
+ 
   double tt = MPI_Wtime();
   fluid_solve_3D_mpi(physical, hatted, ns, Ls, mu, local_n, P);
-  if(rank==0) printf("Time to solve was %f\n",MPI_Wtime()-tt);   
+  if(rank==0) printf("Time to solve was %fs\n",MPI_Wtime()-tt);   
   //print_array3D(physical[3], nx, ny, nz, 1);
   //print_hat_array3D(hatted[0], ns);
   //
@@ -485,6 +492,7 @@ void Fluid_solve_MPI(double **f, double **u, int nx, int ny, int nz, double mu){
 
   MPI_Barrier(MPI_COMM_WORLD);
 
+  if (rank==0) printf("Time to solve and communicate was %f s\n", MPI_Wtime()-tcomm);
   clean_data3D(physical, hatted, P);
   free(global_idxs);
   free(global_ns);
@@ -492,6 +500,7 @@ void Fluid_solve_MPI(double **f, double **u, int nx, int ny, int nz, double mu){
 }
 
 void Fluid_test(int n){
+  //Test MPI fluid solver on a known analytical solution
   int rank, p;
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
   MPI_Comm_size(MPI_COMM_WORLD, &p);
@@ -538,7 +547,7 @@ void Fluid_test(int n){
   Fluid_solve_MPI(f, u, nx, ny, nz, mu);
 
   if(rank==0){//Compare and Clean-up
-    printf("Solve successful, time ellapsed = %f\n", MPI_Wtime()-tt); 
+    printf("Solve successful, time ellapsed = %fs\n", MPI_Wtime()-tt); 
     double erroru=0, errorv=0, errorw=0, errorp=0;
 
     //print_array3D(u[3], nx, ny, nz,0);
@@ -577,7 +586,7 @@ int main(int argc, char **argv){
 
   if (threads_ok) fftw_plan_with_nthreads(omp_get_max_threads());
 
-  //threeD_Example();
+  //threeD_Derivative_Ex();
   Fluid_test(256);
   MPI_Finalize();
 }
